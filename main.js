@@ -433,7 +433,7 @@ function createWorker(self) {
             lastVertexCount = vertexCount;
         }
 
-        console.time("sort");
+        //console.time("sort");
         let maxDepth = -Infinity;
         let minDepth = Infinity;
         let sizeList = new Int32Array(vertexCount);
@@ -463,7 +463,7 @@ function createWorker(self) {
         for (let i = 0; i < vertexCount; i++)
             depthIndex[starts0[sizeList[i]]++] = i;
 
-        console.timeEnd("sort");
+        //console.timeEnd("sort");
 
         lastProj = viewProj;
         self.postMessage({ depthIndex, viewProj, vertexCount }, [
@@ -658,6 +658,8 @@ precision highp float;
 precision highp int;
 
 uniform highp usampler2D u_texture;
+
+
 uniform mat4 projection, view;
 uniform vec2 focal;
 uniform vec2 viewport;
@@ -708,7 +710,7 @@ void main () {
     gl_Position = vec4(
         vCenter
         + position.x * majorAxis / viewport
-        + position.y * minorAxis / viewport, 0.0, 1.0);
+        + position.y * minorAxis / viewport, pos2d.z/pos2d.w, 1.0);
 
 }
 `.trim();
@@ -716,6 +718,8 @@ void main () {
 const fragmentShaderSource = `
 #version 300 es
 precision highp float;
+precision highp int;
+
 
 in vec4 vColor;
 in vec2 vPosition;
@@ -723,13 +727,65 @@ in vec2 vPosition;
 out vec4 fragColor;
 
 void main () {
+
     float A = -dot(vPosition, vPosition);
     if (A < -4.0) discard;
     float B = exp(A) * vColor.a;
     fragColor = vec4(B * vColor.rgb, B);
+
+
 }
 
 `.trim();
+
+const meshVertexShaderSource = `
+#version 300 es
+precision highp float;
+precision highp int;
+
+uniform mat4 projection, view;
+uniform vec2 focal;
+//uniform vec2 viewport;
+
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec4 aColor;
+//layout(location = 2) in vec3 aNormal;
+
+out vec4 vColor;
+//out vec3 vNormal;
+out mat4 projecMat;
+out mat4 viewM;
+
+void main () {
+
+    gl_Position = projection * view * vec4(0.05 * aPosition + 1.*vec3(2.6849, -0.1703, -1.1099), 1.0);
+
+
+    vColor = aColor;
+//  vNormal = aNormal;
+
+
+}
+`.trim();
+
+
+const meshFragmentShaderSource = `
+#version 300 es
+precision highp float;
+
+in vec4 vColor;
+//in vec3 vNormal;
+
+out vec4 fragColor;
+
+void main () {
+    
+    fragColor = vColor.rgba;
+}
+
+`.trim();
+
+
 
 let defaultViewMatrix = [
     0.47, 0.04, 0.88, 0, -0.11, 0.99, 0.02, 0, -0.88, -0.11, 0.47, 0, 0.07,
@@ -782,6 +838,9 @@ async function main() {
     const gl = canvas.getContext("webgl2", {
         antialias: false,
     });
+
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao); // Make it current
 
     const vertexShader = gl.createShader(gl.VERTEX_SHADER);
     gl.shaderSource(vertexShader, vertexShaderSource);
@@ -844,7 +903,353 @@ async function main() {
     gl.vertexAttribIPointer(a_index, 1, gl.INT, false, 0, 0);
     gl.vertexAttribDivisor(a_index, 1);
 
+
+// ----------------------------- Mesh stuff -------------------------------------------------------
+const vaoMesh = gl.createVertexArray();
+gl.bindVertexArray(vaoMesh); // Make it current
+
+const cubeVertices = [
+  // Front face
+  -1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+   1.0, -1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+   1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+    -1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+
+  // Back face
+  -1.0, -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+   -1.0, 1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+   1.0, 1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+   1.0, -1.0, -1.0, 1.0, 0.0, 0.0, 1.0,
+
+  // Top face
+  -1.0, 1.0, -1.0, 0.0, 1.0, 0.0, 1.0,
+  -1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0,
+  1.0, 1.0, 1.0, 0.0, 1.0, 0.0, 1.0,
+  1.0, 1.0, -1.0, 0.0, 1.0, 0.0, 1.0,
+
+  // Bottom face
+  -1.0, -1.0, -1.0, 0.0, 0.0, 1.0, 1.0,
+  1.0, -1.0, -1.0, 0.0, 0.0, 1.0, 1.0,
+  1.0, -1.0, 1.0, 0.0, 0.0, 1.0, 1.0,
+  -1.0, -1.0, 1.0, 0.0, 0.0, 1.0, 1.0,
+
+  // Right face
+  1.0, -1.0, -1.0, 1.0, 1.0, 0.0, 1.0,
+  1.0, 1.0, -1.0, 1.0, 1.0, 0.0, 1.0,
+  1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 1.0,
+  1.0, -1.0, 1.0, 1.0, 1.0, 0.0, 1.0,
+
+  // Left face
+  -1.0, -1.0, -1.0, 1.0, 0.0, 1.0, 1.0,
+  -1.0, -1.0, 1.0, 1.0, 0.0, 1.0, 1.0,
+  -1.0, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0,
+  -1.0, 1.0, -1.0, 1.0, 0.0, 1.0, 1.0,
+];
+
+const meshVertexShader = gl.createShader(gl.VERTEX_SHADER);
+gl.shaderSource(meshVertexShader, meshVertexShaderSource);
+gl.compileShader(meshVertexShader);
+if (!gl.getShaderParameter(meshVertexShader, gl.COMPILE_STATUS))
+    console.error(gl.getShaderInfoLog(meshVertexShader));
+
+const meshFragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+gl.shaderSource(meshFragmentShader, meshFragmentShaderSource);
+gl.compileShader(meshFragmentShader);
+if (!gl.getShaderParameter(meshFragmentShader, gl.COMPILE_STATUS))
+    console.error(gl.getShaderInfoLog(meshFragmentShader));
+
+const meshProgram = gl.createProgram();
+gl.attachShader(meshProgram, meshVertexShader);
+gl.attachShader(meshProgram, meshFragmentShader);
+gl.linkProgram(meshProgram);
+gl.useProgram(meshProgram);
+
+if (!gl.getProgramParameter(meshProgram, gl.LINK_STATUS))
+    console.error(gl.getProgramInfoLog(meshProgram));
+
+
+const mesh_projection = gl.getUniformLocation(meshProgram, "projection");
+const mesh_view = gl.getUniformLocation(meshProgram, "view");
+
+// Vertices
+const meshVertexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, meshVertexBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertices), gl.STATIC_DRAW);
+//const mesh_position = gl.getAttribLocation(program, "aPosition");
+//gl.enableVertexAttribArray(mesh_position);
+gl.enableVertexAttribArray(0);
+gl.enableVertexAttribArray(1);
+gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 7*4, 0);
+gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 7*4, 3 * 4);
+
+
+const meshIndexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshIndexBuffer);
+  const meshIndices = [
+    0,
+    1,
+    2,
+    0,
+    2,
+    3, // front
+    4,
+    5,
+    6,
+    4,
+    6,
+    7, // back
+    8,
+    9,
+    10,
+    8,
+    10,
+    11, // top
+    12,
+    13,
+    14,
+    12,
+    14,
+    15, // bottom
+    16,
+    17,
+    18,
+    16,
+    18,
+    19, // right
+    20,
+    21,
+    22,
+    20,
+    22,
+    23 // left
+  ];
+gl.bufferData(
+    gl.ELEMENT_ARRAY_BUFFER,
+    new Uint16Array(meshIndices),
+    gl.STATIC_DRAW,
+  );
+
+
+// ------------------------------- Quad --------------------------
+const quadVertexShaderSource = `
+#version 300 es
+ 
+// an attribute is an input (in) to a vertex shader.
+// It will receive data from a buffer
+layout(location = 0) in vec2 a_position;
+layout(location = 1) in vec2 a_texCoord;
+
+uniform vec2 u_resolution;
+uniform float u_flipY;
+
+out vec2  v_texCoord;
+
+
+// all shaders have a main function
+void main() {
+  
+  v_texCoord = a_texCoord; //Goes to the fragment shader
+
+  //vec2 pos_clipSpace = ((a_position / u_resolution) * 2.0 - 1.0) * vec2(1.0, -1.0); //Canvas goes from 0 to 1 in y axis
+ 
+  // gl_Position is a special variable a vertex shader
+  // is responsible for setting
+  gl_Position = vec4(a_position * vec2(1, -1) , 0.0, 1.0);
+}
+`.trim();
+
+
+const quadFragmentShaderSource = `
+#version 300 es
+ 
+// fragment shaders don't have a default precision so we need
+// to pick one. highp is a good default. It means "high precision"
+precision highp float;
+
+//uniform highp usampler2D u_img;
+uniform sampler2D u_img;
+
+
+in vec2 v_texCoord;
+
+
+// we need to declare an output for the fragment shader
+out vec4 outColor;
+ 
+void main() {
+    //float depth = texture(u_img, v_texCoord).r;
+    outColor = texture(u_img, v_texCoord);
+    //outColor = vec4(vec3(depth), 1.0);
+  //outColor = vec4(1.0, 0.0, 1.0, 1.0);
+}
+`.trim();
+
+const vaoQuad = gl.createVertexArray();
+gl.bindVertexArray(vaoQuad); // Make it current
+const quadVertices = [
+  // XY         UV
+  -1, -1,  0, 1,
+  -1,  1,  0, 0,
+   1, -1,  1, 1,
+   1,  1,  1, 0,
+];
+
+
+const quadIndices = [
+    0, 1, 2,
+    1, 2, 3,
+];
+
+var quadVertexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadVertexBuffer);
+var quadIndexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, quadIndexBuffer);
+
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(quadVertices), gl.STATIC_DRAW);
+gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(quadIndices), gl.STATIC_DRAW);
+
+gl.enableVertexAttribArray(0);
+gl.enableVertexAttribArray(1);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4*4, 0);
+gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4*4, 2 * 4);
+
+
+const quadVertexShader = gl.createShader(gl.VERTEX_SHADER);
+gl.shaderSource(quadVertexShader, quadVertexShaderSource);
+gl.compileShader(quadVertexShader);
+if (!gl.getShaderParameter(quadVertexShader, gl.COMPILE_STATUS))
+    console.error(gl.getShaderInfoLog(quadVertexShader));
+
+const quadFragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+gl.shaderSource(quadFragmentShader, quadFragmentShaderSource);
+gl.compileShader(quadFragmentShader);
+if (!gl.getShaderParameter(quadFragmentShader, gl.COMPILE_STATUS))
+    console.error(gl.getShaderInfoLog(quadFragmentShader));
+
+const quadProgram = gl.createProgram();
+gl.attachShader(quadProgram, quadVertexShader);
+gl.attachShader(quadProgram, quadFragmentShader);
+gl.linkProgram(quadProgram);
+gl.useProgram(quadProgram);
+
+if (!gl.getProgramParameter(quadProgram, gl.LINK_STATUS))
+    console.error(gl.getProgramInfoLog(quadProgram));
+
+
+const u_quadColorTexutre = gl.getUniformLocation(quadProgram, "u_img");
+
+
+// ----------------------------------
+
+// ----------------------------------- Create color buffer --------------------------
+
+
+const fboMesh = gl.createFramebuffer();
+gl.bindFramebuffer(gl.FRAMEBUFFER, fboMesh);
+// Tell WebGL how to convert from clip space to pixels
+gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+
+// Create a texture for the color buffer.
+    const meshColorBuffer = gl.createTexture();
+
+// make unit i the active texture unit
+gl.activeTexture(gl.TEXTURE0 + 1);
+
+// Bind texture to 'texture unit i' 2D bind point
+gl.bindTexture(gl.TEXTURE_2D, meshColorBuffer);
+
+// Set the parameters so we don't need mips and so we're not filtering
+// and we don't repeat
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.canvas.width, gl.canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+// Bind the texture as where color is going to be written
+gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, meshColorBuffer, 0);
+
+
+// Depth buffer
+
+    const sharedDepthBuffer = gl.createRenderbuffer();
+// make unit i the active texture unit
+//gl.activeTexture(gl.TEXTURE0 + 3);
+
+// Bind texture to 'texture unit i' 2D bind point
+gl.bindRenderbuffer(gl.RENDERBUFFER, sharedDepthBuffer);
+gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, gl.canvas.width, gl.canvas.height);
+gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, sharedDepthBuffer);
+
+console.log(gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE)
+// -------------------------------- FBO gaussianas -------------------------
+
+const fboGaussians = gl.createFramebuffer();
+gl.bindFramebuffer(gl.FRAMEBUFFER, fboGaussians);
+// Tell WebGL how to convert from clip space to pixels
+gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+
+// Create a texture for the color buffer.
+    const gaussiansColorBuffer = gl.createTexture();
+
+// make unit i the active texture unit
+gl.activeTexture(gl.TEXTURE0 + 2);
+
+// Bind texture to 'texture unit i' 2D bind point
+gl.bindTexture(gl.TEXTURE_2D, gaussiansColorBuffer);
+
+// Set the parameters so we don't need mips and so we're not filtering
+// and we don't repeat
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.canvas.width, gl.canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+// Bind the texture as where color is going to be written
+gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gaussiansColorBuffer, 0);
+
+// Depth
+gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, sharedDepthBuffer);
+
+
+/*
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+//gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, gl.canvas.width, gl.canvas.height, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT32F, gl.canvas.width, gl.canvas.height, 0, gl.DEPTH_COMPONENT, gl.FLOAT, null);
+gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, sharedDepthBuffer, 0);
+*/
+
+
+
+
+//gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, sharedDepthBuffer, 0);
+
+console.log(gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE)
+
+//Unbind
+gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+
+
+// ------------ Link this buffers to the programs
+//gl.useProgram(quadProgram);
+//gl.activeTexture(gl.TEXTURE0 + 1);
+//gl.uniform1i(u_quadColorTexutre, 1);
+
+
+// ----------------------------------- End ----------------------------
+
     const resize = () => {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.useProgram(program);
         gl.uniform2fv(u_focal, new Float32Array([camera.fx, camera.fy]));
 
         projectionMatrix = getProjectionMatrix(
@@ -860,7 +1265,36 @@ async function main() {
         gl.canvas.height = Math.round(innerHeight / downsample);
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
+        gl.useProgram(program);
         gl.uniformMatrix4fv(u_projection, false, projectionMatrix);
+        
+        gl.useProgram(meshProgram);
+        gl.uniformMatrix4fv(mesh_projection, false, projectionMatrix);
+
+
+
+        // -------------------------------- Re: size the color buffer
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fboMesh);
+        // Tell WebGL how to convert from clip space to pixels
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+        // make unit i the active texture unit
+        gl.activeTexture(gl.TEXTURE0 + 1);
+        gl.bindTexture(gl.TEXTURE_2D, meshColorBuffer);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.canvas.width, gl.canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+        // make unit i the active texture unit
+        gl.activeTexture(gl.TEXTURE0 + 2);
+        gl.bindTexture(gl.TEXTURE_2D, gaussiansColorBuffer);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.canvas.width, gl.canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+
+        //Depth
+        gl.bindRenderbuffer(gl.RENDERBUFFER, sharedDepthBuffer);
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT24, gl.canvas.width, gl.canvas.height);
+
+        // --------------------- end --------------------
+    
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     };
 
     window.addEventListener("resize", resize);
@@ -914,6 +1348,7 @@ async function main() {
             gl.bindBuffer(gl.ARRAY_BUFFER, indexBuffer);
             gl.bufferData(gl.ARRAY_BUFFER, depthIndex, gl.DYNAMIC_DRAW);
             vertexCount = e.data.vertexCount;
+            //console.log(depthIndex[0]);
         }
     };
 
@@ -1357,9 +1792,82 @@ async function main() {
 
         if (vertexCount > 0) {
             document.getElementById("spinner").style.display = "none";
+// -------------- Meshes
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fboMesh);
+
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);    
+
+
+            gl.bindVertexArray(vaoMesh);
+            gl.useProgram(meshProgram);
+
+            
+            gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
+            gl.depthMask(true);
+            gl.disable(gl.BLEND);
+
+            gl.uniformMatrix4fv(mesh_view, false, actualViewMatrix);
+            gl.drawElements(gl.TRIANGLES, meshIndices.length, gl.UNSIGNED_SHORT, 0);
+
+// ---------------  Gaussians
+         
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fboGaussians);gl.clear(gl.COLOR_BUFFER_BIT);
+  
+            gl.bindVertexArray(vao);
+            gl.useProgram(program);
+
+
+            gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
+            //gl.depthFunc(gl.ALWAYS);
+            gl.depthMask(false); //No writing
+            gl.enable(gl.BLEND);
+            gl.blendFuncSeparate(
+                gl.ONE_MINUS_DST_ALPHA,
+                gl.ONE,
+                gl.ONE_MINUS_DST_ALPHA,
+                gl.ONE,
+            );
+            gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
+            
             gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
-            gl.clear(gl.COLOR_BUFFER_BIT);
             gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
+
+// -------------------- Quad
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);gl.depthMask(true);
+
+            gl.bindVertexArray(vaoQuad);
+
+            gl.useProgram(quadProgram);
+
+            gl.disable(gl.DEPTH_TEST);
+            //gl.enable(gl.BLEND);//
+            //gl.disable(gl.BLEND);
+            gl.blendFuncSeparate(
+                gl.ONE_MINUS_DST_ALPHA, // Source factor for RGB
+                gl.DST_ALPHA,           // Destination factor for RGB
+                gl.ZERO,                // Source factor for Alpha
+                gl.ONE                  // Destination factor for Alpha
+            );
+            gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
+
+            //gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+            gl.useProgram(quadProgram);
+
+            // Render gaussians
+            gl.disable(gl.BLEND);
+            gl.uniform1i(u_quadColorTexutre, 2);
+            gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
+            
+            // Render mesh
+            gl.enable(gl.BLEND);
+            gl.uniform1i(u_quadColorTexutre, 1);
+            gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
+        
+            // Clean gaussian buffer
+            gl.bindFramebuffer(gl.FRAMEBUFFER, fboGaussians);gl.clear(gl.DEPTH_BUFFER_BIT);
+
         } else {
             gl.clear(gl.COLOR_BUFFER_BIT);
             document.getElementById("spinner").style.display = "";
@@ -1399,7 +1907,11 @@ async function main() {
                     canvas.width,
                     canvas.height,
                 );
+                gl.useProgram(program);
                 gl.uniformMatrix4fv(u_projection, false, projectionMatrix);
+
+                gl.useProgram(meshProgram);
+                gl.uniformMatrix4fv(mesh_projection, false, projectionMatrix);
 
                 console.log("Loaded Cameras");
             };
