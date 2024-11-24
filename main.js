@@ -669,6 +669,7 @@ in int index;
 
 out vec4 vColor;
 out vec2 vPosition;
+out float zPos;
 
 void main () {
     uvec4 cen = texelFetch(u_texture, ivec2((uint(index) & 0x3ffu) << 1, uint(index) >> 10), 0);
@@ -712,6 +713,9 @@ void main () {
         + position.x * majorAxis / viewport
         + position.y * minorAxis / viewport, pos2d.z/pos2d.w, 1.0);
 
+    // For depth rendering
+    zPos = cam.z / 10.;
+
 }
 `.trim();
 
@@ -724,6 +728,8 @@ precision highp int;
 in vec4 vColor;
 in vec2 vPosition;
 
+in float zPos;
+
 out vec4 fragColor;
 
 void main () {
@@ -731,9 +737,12 @@ void main () {
     float A = -dot(vPosition, vPosition);
     if (A < -4.0) discard;
     float B = exp(A) * vColor.a;
-    fragColor = vec4(B * vColor.rgb, B);
+    
+    // Depth version
+    //fragColor = vec4(vec3(B * zPos), B);
 
-
+    // Color version
+    fragColor = vec4(vColor.rgb * B,B);
 }
 
 `.trim();
@@ -891,6 +900,7 @@ gl.bindVertexArray(vao); // Make it current
     gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 0, 0);
 
     var texture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, texture);
 
     var u_textureLocation = gl.getUniformLocation(program, "u_texture");
@@ -1067,7 +1077,7 @@ const quadFragmentShaderSource = `
 precision highp float;
 
 //uniform highp usampler2D u_img;
-uniform sampler2D u_img;
+uniform highp sampler2D u_img;
 
 
 in vec2 v_texCoord;
@@ -1141,7 +1151,7 @@ const u_quadColorTexutre = gl.getUniformLocation(quadProgram, "u_img");
 
 // ----------------------------------
 
-// ----------------------------------- Create color buffer --------------------------
+// ----------------------------------- Create color buffers --------------------------
 
 
 const fboMesh = gl.createFramebuffer();
@@ -1284,6 +1294,7 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.canvas.width, gl.canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
 
         // make unit i the active texture unit
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fboGaussians); gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
         gl.activeTexture(gl.TEXTURE0 + 2);
         gl.bindTexture(gl.TEXTURE_2D, gaussiansColorBuffer);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.canvas.width, gl.canvas.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -1316,6 +1327,7 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         } else if (e.data.texdata) {
             const { texdata, texwidth, texheight } = e.data;
             // console.log(texdata)
+            gl.activeTexture(gl.TEXTURE0);
             gl.bindTexture(gl.TEXTURE_2D, texture);
             gl.texParameteri(
                 gl.TEXTURE_2D,
@@ -1832,6 +1844,11 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             
             gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
             gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
+
+
+            //gl.clear(gl.COLOR_BUFFER_BIT);
+            //gl.uniformMatrix4fv(u_view, false, actualViewMatrix);
+            //gl.drawArraysInstanced(gl.TRIANGLE_FAN, 0, 4, vertexCount);
 
 // -------------------- Quad
 
