@@ -346,7 +346,8 @@ export class LightSource
         gl.uniformMatrix4fv(obj.projection, false, this.proj);
         gl.uniformMatrix4fv(obj.view, false, this.view);
 
-        gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+        gl.viewport(0, 0, this.width, this.height);
+        gl.drawElements(gl.TRIANGLES, obj.Indices.length, gl.UNSIGNED_SHORT, 0);
 
         // REturns a texture where R and G have depth information for the shadows
 

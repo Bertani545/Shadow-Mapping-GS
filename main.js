@@ -15,7 +15,7 @@ const {getProjectionMatrix, vertexShaderSource} = perspectiveProjection;
 const gl = canvas.getContext("webgl2", {
         antialias: false,
     });
-
+let theta = 0.0;
 
 
 function createWorker(self) {
@@ -418,6 +418,7 @@ precision highp int;
 
 uniform mat4 projection, view;
 uniform vec2 focal;
+uniform float deg;
 //uniform vec2 viewport;
 
 layout(location = 0) in vec3 aPosition;
@@ -429,9 +430,17 @@ out vec4 vColor;
 out mat4 projecMat;
 out mat4 viewM;
 
+
+mat3 rotationZ(float deg)
+{
+    float rad = deg * 3.14159 / 180.;
+    return mat3(cos(rad), sin(rad), 0., -sin(rad), cos(rad), 0., 0., 0., 1.);
+}
+
+
 void main () {
 
-    gl_Position = projection * view * vec4(0.5 * aPosition + 1.*vec3(2.6849, -0.1703, -1.1099), 1.0);
+    gl_Position = projection * view * vec4(0.5 * rotationZ(deg) * aPosition + 1.*vec3(2.6849, -0.1703, -1.1099), 1.0);
     //gl_Position.w = 1.0;
 
     vColor = aColor;
@@ -665,6 +674,7 @@ if (!gl.getProgramParameter(cube.Program, gl.LINK_STATUS))
 
 cube.projection = gl.getUniformLocation(cube.Program, "projection");
 cube.view = gl.getUniformLocation(cube.Program, "view");
+cube.degrees = gl.getUniformLocation(cube.Program, "deg");
 
 // Vertices
 cube.VertexBuffer = gl.createBuffer();
@@ -723,7 +733,6 @@ gl.bufferData(
     new Uint16Array(cube.Indices),
     gl.STATIC_DRAW,
   );
-
 
 // ------------------------------- Quad --------------------------
 const quadVertexShaderSource = `
@@ -1489,10 +1498,13 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         avgFps = avgFps * 0.9 + currentFps * 0.1;
 
         if (vertexCount > 0) {
+            theta += 0.1;
             document.getElementById("spinner").style.display = "none";
 
             // Render scene in the light sources and create the depth maps
-
+            gl.useProgram(cube.Program);
+            cube.degrees = gl.getUniformLocation(cube.Program, "deg");
+            gl.uniform1f(cube.degrees, theta);
 
             for(let ls of lightSourcesArray) 
             {   
