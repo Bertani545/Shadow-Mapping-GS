@@ -81,10 +81,10 @@ export class LightSource
 
                     float B = exp(A) * alpha;
                     
-                    // Depth version
+                    // Depth camera
                     fragColor = vec4(vec3(B * zPos), B);
 
-                    // Color version
+                    // Depth screen
                     //fragColor = vec4(vec3(gl_FragCoord.z * B), B);
                 }
 
@@ -97,7 +97,7 @@ export class LightSource
         this.depthTextures;
         this.gaussianVAO;
         this.gaussianFBO;
-        this.gaussianDepthBuffer;
+        //this.gaussianDepthBuffer;
         this.indexBuffer;
 
         this.gaussianProgram;
@@ -113,6 +113,8 @@ export class LightSource
 
         this.triangleVertices = new Float32Array([-2, -2, 2, -2, 2, 2, -2, 2]);
 
+
+        this.gl;
 	}
 
 
@@ -154,8 +156,9 @@ export class LightSource
     }
 
 
-    updateGaussians(gl, buffer, vertexCount)
+    updateGaussians(buffer, vertexCount)
     {
+        const gl = this.gl;
         // -------------------------------- Render gaussian plane
         // single render call
         console.log('updating');
@@ -204,7 +207,7 @@ export class LightSource
             
         */
         // Make a depth buffer of the gaussians and save it to a texture
-
+        this.gl = gl;
 
         this.gaussianFBO = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.gaussianFBO);
@@ -231,7 +234,7 @@ export class LightSource
         // Bind the texture as where color is going to be written
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.gaussianDepthMap, 0);
 
-
+/*
         // Depth buffer
 
         this.gaussianDepthBuffer = gl.createRenderbuffer();
@@ -241,7 +244,7 @@ export class LightSource
         gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, this.width, this.height);
         gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.gaussianDepthBuffer);
 
-
+*/
         // Check framebuffer completeness
         if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
             console.error('Framebuffer not complete');
@@ -289,7 +292,7 @@ export class LightSource
 
 
         /* ----------------------- Create the final renderer ------------------------- */
-        /*
+        
         this.fbo = gl.createFramebuffer();
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
         // Tell WebGL how to convert from clip space to pixels
@@ -318,7 +321,7 @@ export class LightSource
         gl.bindRenderbuffer(gl.RENDERBUFFER, this.depthBuffer);
         gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, this.width, this.height);
         gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.depthBuffer);
-*/
+
 
         
         /* --------------------------------- End ------------------------------------- */
@@ -326,16 +329,36 @@ export class LightSource
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
-    render(triangle_buffer)
+    clean()
     {
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.fbo);
+        this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);   
+    }
+    render(obj) // Ideally, we want the meshes to be an object with an asociated program and vao
+    {
+        const gl = this.gl;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+        gl.bindVertexArray(obj.VAO);
+        gl.useProgram(obj.Program);
         // Usees the same logic to render normal objects
+
+        gl.uniformMatrix4fv(obj.projection, false, this.proj);
+        gl.uniformMatrix4fv(obj.view, false, this.view);
+
+        gl.drawElements(gl.TRIANGLES, 36, gl.UNSIGNED_SHORT, 0);
+
         // REturns a texture where R and G have depth information for the shadows
 
         // This allows us to wait for it to finish rendering before anything else (not doing that now tho)
+
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);   
     }
 
-    get depthBuffers()
+    buildShadowsDepthBuffer()
     {
-        return {gaussians: depthBuffer1, normal: depthBuffer2};
+        // Hard coded xdd
     }
+
+
 }

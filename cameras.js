@@ -576,12 +576,12 @@ void main () {
     gl_Position = vec4(
         vCenter
         + position.x * majorAxis / viewport
-        + position.y * minorAxis / viewport, pos2d.z / pos2d.w, 1.0);
+        + position.y * minorAxis / viewport, 0., 1.0);
 
 
     //gl_Position.xyz *= 10.;
     // For depth rendering
-    zPos = cam.z / 10.;
+    zPos = pos2d.z / pos2d.w;
 
 
     alpha = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * float((cov.w >> 24) & 0xffu) / 255.0;
@@ -674,11 +674,11 @@ void main () {
     gl_Position = vec4(
         vCenter
         + position.x * majorAxis / viewport
-        + position.y * minorAxis / viewport, pos2d.z / pos2d.w, 1.0);
+        + position.y * minorAxis / viewport, 0., 1.0);
 
 
     // For depth rendering
-    zPos = pos2d.z / 10.;
+    zPos = pos2d.z / pos2d.w;
 
     alpha = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * float((cov.w >> 24) & 0xffu) / 255.0;
 

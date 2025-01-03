@@ -403,10 +403,10 @@ void main () {
     float B = exp(A) * vColor.a;
     
     // Depth version
-    fragColor = vec4(vec3(B * zPos), B);
+    //fragColor = vec4(vec3(B * zPos), B);
 
     // Color version
-    //fragColor = vec4(vColor.rgb * B, B);
+    fragColor = vec4(vColor.rgb * B, B);
 }
 
 `.trim();
@@ -507,21 +507,21 @@ async function main() {
     // Passing Light Sources 
     const lightSourcesArray = []
     /* Create the light source class*/
-    /*const lightSource1 = new LightSource(1, [
+    const lightSource1 = new LightSource(1, [
                 [0.9208648867765482, 0.0012010625395201253, 0.389880004297208],
                 [-0.06298204172269357, 0.987319521752825, 0.14571693239364383],
                 [-0.3847611242348369, -0.1587410451475895, 0.9092635249821667],
             ].flat(),
             [1.2198221749590001, -0.2196687861401182, -2.3183162007028453]); 
-    */
-    const lightSource1 = new LightSource(1,[
+    
+    /*const lightSource1 = new LightSource(1,[
             [0.9982731285632193, -0.011928707708098955, -0.05751927260507243],
             [0.0065061360949636325, 0.9955928229282383, -0.09355533724430458],
             [0.058381769258182864, 0.09301955098900708, 0.9939511719154457],
         ].flat(),
         [
             -2.5199776022057296, -0.09704735754873686, -3.6247725540304545,
-        ])
+        ])*/
     lightSource1.build(gl);
 
     lightSourcesArray.push(lightSource1);
@@ -596,8 +596,12 @@ gl.bindVertexArray(vao); // Makes it current
 
 
 // ----------------------------- Mesh stuff -------------------------------------------------------
-const vaoMesh = gl.createVertexArray();
-gl.bindVertexArray(vaoMesh); // Make it current
+
+const cube = {};
+
+
+cube.VAO = gl.createVertexArray();
+gl.bindVertexArray(cube.VAO); // Make it current
 
 const cubeVertices = [
   // Front face
@@ -649,22 +653,22 @@ gl.compileShader(meshFragmentShader);
 if (!gl.getShaderParameter(meshFragmentShader, gl.COMPILE_STATUS))
     console.error(gl.getShaderInfoLog(meshFragmentShader));
 
-const meshProgram = gl.createProgram();
-gl.attachShader(meshProgram, meshVertexShader);
-gl.attachShader(meshProgram, meshFragmentShader);
-gl.linkProgram(meshProgram);
-gl.useProgram(meshProgram);
+cube.Program = gl.createProgram();
+gl.attachShader(cube.Program, meshVertexShader);
+gl.attachShader(cube.Program, meshFragmentShader);
+gl.linkProgram(cube.Program);
+gl.useProgram(cube.Program);
 
-if (!gl.getProgramParameter(meshProgram, gl.LINK_STATUS))
-    console.error(gl.getProgramInfoLog(meshProgram));
+if (!gl.getProgramParameter(cube.Program, gl.LINK_STATUS))
+    console.error(gl.getProgramInfoLog(cube.Program));
 
 
-const mesh_projection = gl.getUniformLocation(meshProgram, "projection");
-const mesh_view = gl.getUniformLocation(meshProgram, "view");
+cube.projection = gl.getUniformLocation(cube.Program, "projection");
+cube.view = gl.getUniformLocation(cube.Program, "view");
 
 // Vertices
-const meshVertexBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, meshVertexBuffer);
+cube.VertexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, cube.VertexBuffer );
 gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(cubeVertices), gl.STATIC_DRAW);
 //const mesh_position = gl.getAttribLocation(program, "aPosition");
 //gl.enableVertexAttribArray(mesh_position);
@@ -674,9 +678,9 @@ gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 7*4, 0);
 gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 7*4, 3 * 4);
 
 
-const meshIndexBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshIndexBuffer);
-  const meshIndices = [
+cube.IndexBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cube.IndexBuffer);
+  cube.Indices = [
     0,
     1,
     2,
@@ -716,7 +720,7 @@ gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, meshIndexBuffer);
   ];
 gl.bufferData(
     gl.ELEMENT_ARRAY_BUFFER,
-    new Uint16Array(meshIndices),
+    new Uint16Array(cube.Indices),
     gl.STATIC_DRAW,
   );
 
@@ -950,8 +954,8 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.useProgram(program);
         gl.uniformMatrix4fv(u_projection, false, projectionMatrix);
         
-        gl.useProgram(meshProgram);
-        gl.uniformMatrix4fv(mesh_projection, false, projectionMatrix);
+        gl.useProgram(cube.Program);
+        gl.uniformMatrix4fv(cube.projection, false, projectionMatrix);
 
 
 
@@ -1032,7 +1036,7 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
             // Update light sources
             for(let ls of lightSourcesArray){
-                ls.updateGaussians(gl, f_buffer, vertexCount);
+                ls.updateGaussians(f_buffer, vertexCount);
             }
 
         } else if (e.data.depthIndex) {
@@ -1486,6 +1490,30 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
         if (vertexCount > 0) {
             document.getElementById("spinner").style.display = "none";
+
+            // Render scene in the light sources and create the depth maps
+
+
+            for(let ls of lightSourcesArray) 
+            {   
+                gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
+                gl.depthMask(true);
+                gl.disable(gl.BLEND);
+                ls.clean();
+                /*
+                for(let mesh of meshes)
+                {
+                    ls.render();
+                }*/
+                ls.render(cube);
+
+                ls.buildShadowsDepthBuffer();
+            }
+            
+            // Render scene
+
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height); // The lightmaps resizes the viewport
+
 // -------------- Meshes
 
             gl.bindFramebuffer(gl.FRAMEBUFFER, fboMesh);
@@ -1493,16 +1521,16 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);    
 
 
-            gl.bindVertexArray(vaoMesh);
-            gl.useProgram(meshProgram);
+            gl.bindVertexArray(cube.VAO);
+            gl.useProgram(cube.Program);
 
             
             gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);
             gl.depthMask(true);
             gl.disable(gl.BLEND);
 
-            gl.uniformMatrix4fv(mesh_view, false, actualViewMatrix);
-            gl.drawElements(gl.TRIANGLES, meshIndices.length, gl.UNSIGNED_SHORT, 0);
+            gl.uniformMatrix4fv(cube.view, false, actualViewMatrix);
+            gl.drawElements(gl.TRIANGLES, cube.Indices.length, gl.UNSIGNED_SHORT, 0);
 
 // ---------------  Gaussians
          
@@ -1556,13 +1584,13 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
             // Render gaussians
             gl.disable(gl.BLEND);
-            gl.uniform1i(u_quadColorTexutre, 5);
+            gl.uniform1i(u_quadColorTexutre, 6);
             gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
             
             // Render mesh
             gl.enable(gl.BLEND);
             gl.uniform1i(u_quadColorTexutre, 1);
-            gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
+            //gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
         
             // Clean gaussian buffer
             gl.bindFramebuffer(gl.FRAMEBUFFER, fboGaussians);gl.clear(gl.DEPTH_BUFFER_BIT);
