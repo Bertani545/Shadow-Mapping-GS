@@ -19,7 +19,7 @@ export const intrinsicValuesCamera =
 {
     getProjectionMatrix(fx, fy, width, height){
     const znear = 0.2;
-    const zfar = 200;
+    const zfar = 20;
 
     return [
         [(2 * fx) / width, 0, 0, 0],
@@ -113,7 +113,7 @@ export const orthographicProjection =
 {
     getProjectionMatrix(fx, fy, width, height) {
     const znear = 0.2;
-    const zfar = 200;
+    const zfar = 20;
     const left = -5;
     const right = 5;
     const bottom = -5;
@@ -222,7 +222,7 @@ export const perspectiveProjection =
 {
     getProjectionMatrix(fx, fy, width, height) {
         const znear = 0.2;
-        const zfar = 200;
+        const zfar = 20;
 
         const FOV = 90  / 2;
         const aspect = width / height;
@@ -500,7 +500,7 @@ export const orthographicLight =
 {
     getProjectionMatrix(width, height) {
     const znear = 0.2;
-    const zfar = 200;
+    const zfar = 20;
     const left = -5;
     const right = 5;
     const bottom = -5;
@@ -595,7 +595,7 @@ export const perspectiveLight =
 {
     getProjectionMatrix(width, height) {
         const znear = 0.2;
-        const zfar = 200;
+        const zfar = 20;
 
         const FOV = 90  / 2;
         const aspect = width / height;

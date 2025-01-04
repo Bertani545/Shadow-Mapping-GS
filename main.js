@@ -411,62 +411,6 @@ void main () {
 
 `.trim();
 
-const meshVertexShaderSource = `
-#version 300 es
-precision highp float;
-precision highp int;
-
-uniform mat4 projection, view;
-uniform vec2 focal;
-uniform float deg;
-//uniform vec2 viewport;
-
-layout(location = 0) in vec3 aPosition;
-layout(location = 1) in vec4 aColor;
-//layout(location = 2) in vec3 aNormal;
-
-out vec4 vColor;
-//out vec3 vNormal;
-out mat4 projecMat;
-out mat4 viewM;
-
-
-mat3 rotationZ(float deg)
-{
-    float rad = deg * 3.14159 / 180.;
-    return mat3(cos(rad), sin(rad), 0., -sin(rad), cos(rad), 0., 0., 0., 1.);
-}
-
-
-void main () {
-
-    gl_Position = projection * view * vec4(0.5 * rotationZ(deg) * aPosition + 1.*vec3(2.6849, -0.1703, -1.1099), 1.0);
-    //gl_Position.w = 1.0;
-
-    vColor = aColor;
-//  vNormal = aNormal;
-
-
-}
-`.trim();
-
-
-const meshFragmentShaderSource = `
-#version 300 es
-precision highp float;
-
-in vec4 vColor;
-//in vec3 vNormal;
-
-out vec4 fragColor;
-
-void main () {
-    
-    fragColor = vColor.rgba;
-}
-
-`.trim();
-
 
 
 let defaultViewMatrix = [
@@ -605,6 +549,78 @@ gl.bindVertexArray(vao); // Makes it current
 
 
 // ----------------------------- Mesh stuff -------------------------------------------------------
+    const meshVertexShaderSource = `
+#version 300 es
+precision highp float;
+precision highp int;
+
+uniform mat4 projection, view;
+uniform vec2 focal;
+uniform float deg;
+//uniform vec2 viewport;
+
+layout(location = 0) in vec3 aPosition;
+layout(location = 1) in vec4 aColor;
+//layout(location = 2) in vec3 aNormal;
+
+out vec4 vColor;
+//out vec3 vNormal;
+out mat4 projecMat;
+out mat4 viewM;
+
+
+mat3 rotationZ(float deg)
+{
+    float rad = deg * 3.14159 / 180.;
+    return mat3(cos(rad), sin(rad), 0., -sin(rad), cos(rad), 0., 0., 0., 1.);
+}
+
+
+void main () {
+
+    gl_Position = projection * view * vec4(0.5 * rotationZ(deg) * aPosition + 1.*vec3(2.6849, -0.1703, -1.1099), 1.0);
+    //gl_Position.w = 1.0;
+
+    vColor = aColor;
+    vColor = vec4(gl_Position.z / gl_Position.w);
+//  vNormal = aNormal;
+
+
+}
+`.trim();
+
+const meshFragmentShaderSource = `
+#version 300 es
+precision highp float;
+
+in vec4 vColor;
+//in vec3 vNormal;
+
+out vec4 fragColor;
+
+void main () {
+    fragColor = vColor.rgba;
+}
+
+`.trim();
+
+const meshFragmentShaderSourceShadows = `
+#version 300 es
+precision highp float;
+
+in vec4 vColor;
+//in vec3 vNormal;
+//out vec4 fragColor;
+
+
+void main () {
+    // gl_FragDepth = gl_FragCoord.z;
+    //fragColor = vec4(gl_FragCoord.z);
+}
+
+`.trim();
+
+
 
 const cube = {};
 
@@ -650,31 +666,19 @@ const cubeVertices = [
   -1.0, 1.0, -1.0, 1.0, 0.0, 1.0, 1.0,
 ];
 
-const meshVertexShader = gl.createShader(gl.VERTEX_SHADER);
-gl.shaderSource(meshVertexShader, meshVertexShaderSource);
-gl.compileShader(meshVertexShader);
-if (!gl.getShaderParameter(meshVertexShader, gl.COMPILE_STATUS))
-    console.error(gl.getShaderInfoLog(meshVertexShader));
 
-const meshFragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-gl.shaderSource(meshFragmentShader, meshFragmentShaderSource);
-gl.compileShader(meshFragmentShader);
-if (!gl.getShaderParameter(meshFragmentShader, gl.COMPILE_STATUS))
-    console.error(gl.getShaderInfoLog(meshFragmentShader));
-
-cube.Program = gl.createProgram();
-gl.attachShader(cube.Program, meshVertexShader);
-gl.attachShader(cube.Program, meshFragmentShader);
+cube.Program = createProgram(gl, meshVertexShaderSource, meshFragmentShaderSource);
 gl.linkProgram(cube.Program);
 gl.useProgram(cube.Program);
 
 if (!gl.getProgramParameter(cube.Program, gl.LINK_STATUS))
     console.error(gl.getProgramInfoLog(cube.Program));
-
-
 cube.projection = gl.getUniformLocation(cube.Program, "projection");
 cube.view = gl.getUniformLocation(cube.Program, "view");
 cube.degrees = gl.getUniformLocation(cube.Program, "deg");
+
+
+
 
 // Vertices
 cube.VertexBuffer = gl.createBuffer();
@@ -734,6 +738,17 @@ gl.bufferData(
     gl.STATIC_DRAW,
   );
 
+
+// Shadow stuff
+cube.ShadowProgram = createProgram(gl, meshVertexShaderSource, meshFragmentShaderSourceShadows);
+gl.linkProgram(cube.ShadowProgram);
+gl.useProgram(cube.ShadowProgram);
+
+if (!gl.getProgramParameter(cube.ShadowProgram, gl.LINK_STATUS))
+    console.error(gl.getProgramInfoLog(cube.ShadowProgram));
+cube.ShadowProjection = gl.getUniformLocation(cube.ShadowProgram, "projection");
+cube.ShadowView = gl.getUniformLocation(cube.ShadowProgram, "view");
+cube.ShadowDegrees = gl.getUniformLocation(cube.ShadowProgram, "deg");
 // ------------------------------- Quad --------------------------
 const quadVertexShaderSource = `
 #version 300 es
@@ -782,7 +797,7 @@ out vec4 outColor;
  
 void main() {
     //float depth = texture(u_img, v_texCoord).r;
-    outColor = texture(u_img, v_texCoord);
+    outColor = vec4(texture(u_img, v_texCoord).r);
     //outColor = vec4(vec3(depth), 1.0);
   //outColor = vec4(1.0, 0.0, 1.0, 1.0);
 }
@@ -1503,8 +1518,9 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
             // Render scene in the light sources and create the depth maps
             gl.useProgram(cube.Program);
-            cube.degrees = gl.getUniformLocation(cube.Program, "deg");
             gl.uniform1f(cube.degrees, theta);
+            gl.useProgram(cube.ShadowProgram);
+            gl.uniform1f(cube.ShadowDegrees, theta);
 
             for(let ls of lightSourcesArray) 
             {   
