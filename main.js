@@ -799,8 +799,8 @@ out vec4 outColor;
  
 void main() {
     //float depth = texture(u_img, v_texCoord).r;
-    //outColor = vec4(vec3(texture(u_img, v_texCoord).r),, 1.0);
-    outColor = texture(u_img, v_texCoord).rgba;
+    outColor = vec4(vec3(texture(u_img, v_texCoord).r), 1.0);
+    //outColor = texture(u_img, v_texCoord).rgba;
 
     //outColor = vec4(vec3(gl_FragDepth), 1.0);
   
@@ -1613,13 +1613,13 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
             // Render gaussians
             gl.disable(gl.BLEND);
-            gl.uniform1i(u_quadColorTexutre, 2);
+            gl.uniform1i(u_quadColorTexutre, 7);
             gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
             
             // Render mesh
             gl.enable(gl.BLEND);
             gl.uniform1i(u_quadColorTexutre, 1);
-            gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
+            //gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
         
 
             gl.clear(gl.DEPTH_BUFFER_BIT);

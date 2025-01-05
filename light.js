@@ -156,9 +156,10 @@ export class LightSource
             float depthGaussian = texture(gaussiansDepth, v_texCoord).r;
             float depthMesh = texture(meshesDepth, v_texCoord).r;
 
-            float realDepth = min(depthGaussian, depthMesh);
-            float isMeshVisible = step(depthGaussian, depthMesh);
+            float isMeshVisible = float(depthGaussian > depthMesh || texture(gaussiansDepth, v_texCoord).a < 0.95);
 
+            float realDepth = depthGaussian * (1. - isMeshVisible)  + depthMesh * isMeshVisible;
+            
             outColor = vec4(realDepth, depthMesh, isMeshVisible, 1.0);
         }
         `.trim();
@@ -219,6 +220,7 @@ export class LightSource
         this.runSort(this.worldToScreen, buffer, vertexCount);
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.gaussianFBO);
+        gl.clearColor(0.0, 0.0, 0.0, 0.0);
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT); 
         gl.bindVertexArray(this.gaussianVAO);
         gl.useProgram(this.gaussianProgram);
