@@ -211,7 +211,7 @@ void main () {
 
     //gl_Position.xyz *= 10.;
     // For depth rendering
-    zPos = cam.z / 10.;
+    zPos = pos2d.z / pos2d.w;
 
 }
 `.trim()
@@ -309,7 +309,7 @@ void main () {
 
     //gl_Position.xyz *= 100.;
     // For depth rendering
-    zPos = cam.z / 10.;
+    zPos = pos2d.z / pos2d.w;
 
 }
 `.trim()

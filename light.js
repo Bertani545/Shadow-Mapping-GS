@@ -113,8 +113,62 @@ export class LightSource
 
         this.triangleVertices = new Float32Array([-2, -2, 2, -2, 2, 2, -2, 2]);
 
+        this.meshesFBO;
+        this.meshesDepth;
 
         this.gl;
+
+
+        this.quadVertexShaderSource = `
+        #version 300 es
+         
+        layout(location = 0) in vec2 a_position;
+        layout(location = 1) in vec2 a_texCoord;
+
+        out vec2  v_texCoord;
+
+        void main() {
+          
+          v_texCoord = a_texCoord;
+          gl_Position = vec4(a_position * vec2(1, -1) , 0.0, 1.0);
+        }
+        `.trim();
+
+
+        this.quadFragmentShaderSource = `
+        #version 300 es
+         
+        precision highp float;
+
+        uniform highp sampler2D gaussiansDepth;
+        uniform highp sampler2D meshesDepth;
+
+        in vec2 v_texCoord;
+
+        out vec4 outColor;
+         
+        void main() {
+            // We output the necesary information to different channels
+            // One that combines gaussian and mesh depth information
+            // and another that only saves the mesh depth information infront of gaussians
+            // Asumes that the 
+
+            float depthGaussian = texture(gaussiansDepth, v_texCoord).r;
+            float depthMesh = texture(meshesDepth, v_texCoord).r;
+
+            float realDepth = min(depthGaussian, depthMesh);
+            float isMeshVisible = step(depthGaussian, depthMesh);
+
+            outColor = vec4(realDepth, depthMesh, isMeshVisible, 1.0);
+        }
+        `.trim();
+
+        this.quadVAO;
+        this.quadVertexBuffer;
+        this.quadIndexBuffer;
+        this.quadProgram;
+        this.depthMixFBO
+        this.depthMixBuffer
 	}
 
 
@@ -255,8 +309,6 @@ export class LightSource
         this.gaussianVAO = gl.createVertexArray();
         gl.bindVertexArray(this.gaussianVAO);
 
-
-
         this.gaussianProgram = createProgram(gl, this.vertexSource, this.fragmentSource);
         gl.linkProgram(this.gaussianProgram);
         gl.useProgram(this.gaussianProgram);
@@ -293,51 +345,100 @@ export class LightSource
 
         /* ----------------------- Create the mesh renderer ------------------------- */
         
-        this.fbo = gl.createFramebuffer();
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+        this.meshesFBO = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.meshesFBO);
         // Tell WebGL how to convert from clip space to pixels
         gl.viewport(0, 0, this.width, this.height);
         
-        this.depthTextures = gl.createTexture();
+        this.meshesDepth = gl.createTexture();
 
         // make unit i the active texture unit
         gl.activeTexture(gl.TEXTURE0 + 6); // Hard coded
         // Bind texture to 'texture unit i' 2D bind point
-        gl.bindTexture(gl.TEXTURE_2D, this.depthTextures);
+        gl.bindTexture(gl.TEXTURE_2D, this.meshesDepth);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT24, this.width, this.height, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_INT, null);
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.depthTextures, 0.0);
-
-
-
-        // Will render to this one every frame
-        //gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.depthTextures, 0);
-
-        //this.depthBuffer = gl.createRenderbuffer();
-        //gl.bindRenderbuffer(gl.RENDERBUFFER, this.depthBuffer);
-        //gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, this.width, this.height);
-        //gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.depthBuffer);
-
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.TEXTURE_2D, this.meshesDepth, 0.0);
 
         
-        /* --------------------------------- End ------------------------------------- */
+        /* --------------------------------- Quad and FBO for Depth mix ------------------------------------- */
+        // Using a quad
+        this.quadVAO = gl.createVertexArray();
+        gl.bindVertexArray(this.quadVAO);
+        
+        this.quadVertexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.quadVertexBuffer);
+        this.quadIndexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.quadIndexBuffer);
 
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+                            // XY         UV
+                          -1, -1,  0, 1,
+                          -1,  1,  0, 0,
+                           1, -1,  1, 1,
+                           1,  1,  1, 0]), gl.STATIC_DRAW);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0,1,2,1,2,3]), gl.STATIC_DRAW);
+
+        gl.enableVertexAttribArray(0);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4*4, 0);
+        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4*4, 2 * 4);
+
+        this.quadProgram = createProgram(gl, this.quadVertexShaderSource, this.quadFragmentShaderSource);
+        gl.linkProgram(this.quadProgram);
+        gl.useProgram(this.quadProgram);
+
+        if (!gl.getProgramParameter(this.quadProgram, gl.LINK_STATUS))
+            console.error(gl.getProgramInfoLog(this.quadProgram));
+
+        // Atach the depth texture the create the necesary ones
+        this.quadGaussianTexture = gl.getUniformLocation(this.quadProgram, "gaussiansDepth");
+        this.quadMeshTexture = gl.getUniformLocation(this.quadProgram, "meshesDepth");
+        // -------------------------- Create the FBO for this VAO ------------------------------
+        this.depthMixFBO = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.depthMixFBO);
+        // Create a texture for the color buffer.
+        this.depthMixBuffer = gl.createTexture();
+
+        // make unit i the active texture unit
+        gl.activeTexture(gl.TEXTURE0 + 7);
+
+        // Bind texture to 'texture unit i' 2D bind point
+        gl.bindTexture(gl.TEXTURE_2D, this.depthMixBuffer);
+
+        // Set the parameters so we don't need mips and so we're not filtering
+        // and we don't repeat
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        // Bind the texture as where color is going to be written
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.depthMixBuffer, 0);
+
+        /*-------------------------------------- End -------------------------------------------------------- */
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     }
 
     clean()
     {
-        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.fbo);
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.meshesFBO);
         this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.depthMixFBO);
+        this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl.DEPTH_BUFFER_BIT);
+
         this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);   
     }
     render(obj) // Ideally, we want the meshes to be an object with an asociated program and vao
     {
         const gl = this.gl;
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbo);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.meshesFBO);
         gl.bindVertexArray(obj.VAO);
         gl.useProgram(obj.ShadowProgram);
         // Usees the same logic to render normal objects
@@ -358,6 +459,23 @@ export class LightSource
     buildShadowsDepthBuffer()
     {
         // Hard coded xdd
+        const gl = this.gl;
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.depthMixFBO);
+        gl.bindVertexArray(this.quadVAO);
+        gl.useProgram(this.quadProgram);
+
+
+        gl.uniform1i(this.quadGaussianTexture, 5);
+        gl.uniform1i(this.quadMeshTexture, 6);
+
+        gl.viewport(0, 0, this.width, this.height);
+        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+
+        // REturns a texture where R and G have depth information for the shadows
+
+        // This allows us to wait for it to finish rendering before anything else (not doing that now tho)
+
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);  
     }
 
 

@@ -407,6 +407,8 @@ void main () {
 
     // Color version
     fragColor = vec4(vColor.rgb * B, B);
+
+    fragColor = vec4(B*zPos, vColor.yz * B, B);
 }
 
 `.trim();
@@ -582,7 +584,7 @@ void main () {
     //gl_Position.w = 1.0;
 
     vColor = aColor;
-    vColor = vec4(gl_Position.z / gl_Position.w);
+    //vColor = vec4(gl_Position.z / gl_Position.w);
 //  vNormal = aNormal;
 
 
@@ -599,7 +601,7 @@ in vec4 vColor;
 out vec4 fragColor;
 
 void main () {
-    fragColor = vColor.rgba;
+    fragColor = vec4(vColor.rgb, gl_FragCoord.z);
 }
 
 `.trim();
@@ -797,9 +799,11 @@ out vec4 outColor;
  
 void main() {
     //float depth = texture(u_img, v_texCoord).r;
-    outColor = vec4(texture(u_img, v_texCoord).r);
-    //outColor = vec4(vec3(depth), 1.0);
-  //outColor = vec4(1.0, 0.0, 1.0, 1.0);
+    //outColor = vec4(vec3(texture(u_img, v_texCoord).r),, 1.0);
+    outColor = texture(u_img, v_texCoord).rgba;
+
+    //outColor = vec4(vec3(gl_FragDepth), 1.0);
+  
 }
 `.trim();
 
@@ -892,10 +896,7 @@ gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, mes
 
 
 // Depth buffer
-
-    const sharedDepthBuffer = gl.createRenderbuffer();
-// make unit i the active texture unit
-//gl.activeTexture(gl.TEXTURE0 + 3);
+const sharedDepthBuffer = gl.createRenderbuffer();
 
 // Bind texture to 'texture unit i' 2D bind point
 gl.bindRenderbuffer(gl.RENDERBUFFER, sharedDepthBuffer);
@@ -1590,7 +1591,7 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
 // -------------------- Quad
 
-            gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);gl.depthMask(true);
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.clear(gl.COLOR_BUFFER_BIT);gl.depthMask(true);
 
             gl.bindVertexArray(vaoQuad);
 
@@ -1612,14 +1613,17 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
             // Render gaussians
             gl.disable(gl.BLEND);
-            gl.uniform1i(u_quadColorTexutre, 6);
+            gl.uniform1i(u_quadColorTexutre, 2);
             gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
             
             // Render mesh
             gl.enable(gl.BLEND);
             gl.uniform1i(u_quadColorTexutre, 1);
-            //gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
+            gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
         
+
+            gl.clear(gl.DEPTH_BUFFER_BIT);
+
             // Clean gaussian buffer
             gl.bindFramebuffer(gl.FRAMEBUFFER, fboGaussians);gl.clear(gl.DEPTH_BUFFER_BIT);
 
