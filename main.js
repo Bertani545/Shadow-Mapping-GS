@@ -780,16 +780,17 @@ void main() {
 `.trim();
 
 
-const quadFragmentShaderSource = `
+const gaussianQuadFragmentShaderSource = `
 #version 300 es
  
 // fragment shaders don't have a default precision so we need
 // to pick one. highp is a good default. It means "high precision"
 precision highp float;
 
-//uniform highp usampler2D u_img;
-uniform highp sampler2D u_img;
-
+uniform highp sampler2D u_colorTexture;
+uniform highp sampler2D u_depthTexture;
+uniform mat4 projection, view;
+uniform mat4 lightTransformation; // Only one for now
 
 in vec2 v_texCoord;
 
@@ -798,9 +799,37 @@ in vec2 v_texCoord;
 out vec4 outColor;
  
 void main() {
-    //float depth = texture(u_img, v_texCoord).r;
-    outColor = vec4(vec3(texture(u_img, v_texCoord).r), 1.0);
-    //outColor = texture(u_img, v_texCoord).rgba;
+    //float depth = texture(u_colorTexture, v_texCoord).r;
+    //outColor = vec4(vec3(texture(u_colorTexture, v_texCoord).r), 1.0);
+    outColor = texture(u_colorTexture, v_texCoord).rgba;
+
+    //outColor = vec4(vec3(gl_FragDepth), 1.0);
+  
+}
+`.trim();
+
+const meshesQuadFragmentShaderSource = `
+#version 300 es
+ 
+// fragment shaders don't have a default precision so we need
+// to pick one. highp is a good default. It means "high precision"
+precision highp float;
+
+uniform highp sampler2D u_colorTexture;
+uniform highp sampler2D u_depthTexture;
+uniform mat4 projection, view;
+uniform mat4 lightTransformation; // Only one for now
+
+in vec2 v_texCoord;
+
+
+// we need to declare an output for the fragment shader
+out vec4 outColor;
+ 
+void main() {
+    //float depth = texture(u_colorTexture, v_texCoord).r;
+    //outColor = vec4(vec3(texture(u_colorTexture, v_texCoord).r), 1.0);
+    outColor = texture(u_colorTexture, v_texCoord).rgba;
 
     //outColor = vec4(vec3(gl_FragDepth), 1.0);
   
@@ -837,29 +866,31 @@ gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 4*4, 0);
 gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 4*4, 2 * 4);
 
 
-const quadVertexShader = gl.createShader(gl.VERTEX_SHADER);
-gl.shaderSource(quadVertexShader, quadVertexShaderSource);
-gl.compileShader(quadVertexShader);
-if (!gl.getShaderParameter(quadVertexShader, gl.COMPILE_STATUS))
-    console.error(gl.getShaderInfoLog(quadVertexShader));
+const quadGaussian = {}
+const quadMeshes = {}
 
-const quadFragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-gl.shaderSource(quadFragmentShader, quadFragmentShaderSource);
-gl.compileShader(quadFragmentShader);
-if (!gl.getShaderParameter(quadFragmentShader, gl.COMPILE_STATUS))
-    console.error(gl.getShaderInfoLog(quadFragmentShader));
+quadGaussian.Program = createProgram(gl, quadVertexShaderSource, gaussianQuadFragmentShaderSource);
+quadMeshes.Program = createProgram(gl, quadVertexShaderSource, meshesQuadFragmentShaderSource);
 
-const quadProgram = gl.createProgram();
-gl.attachShader(quadProgram, quadVertexShader);
-gl.attachShader(quadProgram, quadFragmentShader);
-gl.linkProgram(quadProgram);
-gl.useProgram(quadProgram);
+gl.linkProgram(quadGaussian.Program);
+gl.useProgram(quadGaussian.Program);
 
-if (!gl.getProgramParameter(quadProgram, gl.LINK_STATUS))
-    console.error(gl.getProgramInfoLog(quadProgram));
+quadGaussian.Projection = gl.getUniformLocation(quadGaussian.Program, "projection");
+quadGaussian.View =       gl.getUniformLocation(quadGaussian.Program, "view");
+quadGaussian.LightTrans = gl.getUniformLocation(quadGaussian.Program, "lightTransformation");
+quadGaussian.ImageTex =   gl.getUniformLocation(quadGaussian.Program, "u_colorTexture");
+quadGaussian.DepthTex =   gl.getUniformLocation(quadGaussian.Program, "u_depthTexture");
 
 
-const u_quadColorTexutre = gl.getUniformLocation(quadProgram, "u_img");
+gl.linkProgram(quadMeshes.Program);
+gl.useProgram(quadMeshes.Program);
+
+quadMeshes.Projection = gl.getUniformLocation(quadMeshes.Program, "projection");
+quadMeshes.View =       gl.getUniformLocation(quadMeshes.Program, "view");
+quadMeshes.LightTrans = gl.getUniformLocation(quadMeshes.Program, "lightTransformation");
+quadMeshes.ImageTex =   gl.getUniformLocation(quadMeshes.Program, "u_colorTexture");
+quadMeshes.DepthTex =   gl.getUniformLocation(quadMeshes.Program, "u_depthTexture");
+
 
 
 // ----------------------------------------------------------------------
@@ -981,6 +1012,11 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         
         gl.useProgram(cube.Program);
         gl.uniformMatrix4fv(cube.projection, false, projectionMatrix);
+
+        gl.useProgram(quadGaussian.Program);
+        gl.uniformMatrix4fv(quadGaussian.Projection, true, projectionMatrix);
+        gl.useProgram(quadMeshes.Program);
+        gl.uniformMatrix4fv(quadMeshes.Projection, true, projectionMatrix);
 
 
 
@@ -1594,8 +1630,7 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.clear(gl.COLOR_BUFFER_BIT);gl.depthMask(true);
 
             gl.bindVertexArray(vaoQuad);
-
-            gl.useProgram(quadProgram);
+            
 
             gl.disable(gl.DEPTH_TEST);
             //gl.enable(gl.BLEND);//
@@ -1609,18 +1644,30 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.blendEquationSeparate(gl.FUNC_ADD, gl.FUNC_ADD);
 
             //gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-            gl.useProgram(quadProgram);
 
             // Render gaussians
+            gl.useProgram(quadGaussian.Program);
+            gl.uniformMatrix4fv(quadGaussian.View, true, actualViewMatrix);
+            gl.uniformMatrix4fv(quadGaussian.LightTrans, false, lightSourcesArray[0].worldToScreen);
+            gl.uniform1i(quadGaussian.ImageTex, 2);
+            gl.uniform1i(quadGaussian.DepthTex, 7);
+
             gl.disable(gl.BLEND);
-            gl.uniform1i(u_quadColorTexutre, 7);
             gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
-            
+
+
+
             // Render mesh
+            gl.useProgram(quadMeshes.Program);
+            gl.uniformMatrix4fv(quadMeshes.View, true, actualViewMatrix);
+            gl.uniformMatrix4fv(quadMeshes.LightTrans, false, lightSourcesArray[0].worldToScreen);
+            gl.uniform1i(quadMeshes.ImageTex, 1);
+            gl.uniform1i(quadMeshes.DepthTex, 7);
+
             gl.enable(gl.BLEND);
-            gl.uniform1i(u_quadColorTexutre, 1);
-            //gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
+            gl.drawElements(gl.TRIANGLES, quadIndices.length, gl.UNSIGNED_SHORT, 0);
         
+
 
             gl.clear(gl.DEPTH_BUFFER_BIT);
 
