@@ -67,8 +67,6 @@ void main () {
     vec2 u1 = unpackHalf2x16(cov.x), u2 = unpackHalf2x16(cov.y), u3 = unpackHalf2x16(cov.z);
     mat3 Vrk = mat3(u1.x, u1.y, u2.x, u1.y, u2.y, u3.x, u2.x, u3.x, u3.y); // Cov3D
 
-    //float focal_y = viewport.y / (2.0 * tan(90. / 2.0 / 180. * 3.14159));
-    //float focal_x = focal_y * (viewport.x / viewport.y);
 
     mat3 J = mat3(
         focal.x / cam.z, 0., -(focal.x * cam.x) / (cam.z * cam.z),
@@ -300,7 +298,7 @@ void main () {
     vColor = clamp(pos2d.z/pos2d.w+1.0, 0.0, 1.0) * vec4((cov.w) & 0xffu, (cov.w >> 8) & 0xffu, (cov.w >> 16) & 0xffu, (cov.w >> 24) & 0xffu) / 255.0;
     vPosition = position;
 
-    vec2 vCenter =  vec2(pos2d) / pos2d.w;//pos2d.xy;//
+    vec2 vCenter =  vec2(pos2d) / pos2d.w;
     gl_Position = vec4(
         vCenter
         + position.x * majorAxis / viewport
@@ -392,7 +390,7 @@ export let cameras = [
         width: 1959,
         height: 1090,
         position: [
-            1.2198221749590001, -0.2196687861401182, -2.3183162007028453,
+            1.2198221749590001, -0.2196687861401182, -2,
         ],
         rotation: [
             [0.9208648867765482, 0.0012010625395201253, 0.389880004297208],

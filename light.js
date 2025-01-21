@@ -437,13 +437,20 @@ export class LightSource
 
         this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);   
     }
-    render(obj) // Ideally, we want the meshes to be an object with an asociated program and vao
+    render(obj, theta, trans, scale) // Ideally, we want the meshes to be an object with an asociated program and vao
     {
         const gl = this.gl;
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.meshesFBO);
         gl.bindVertexArray(obj.VAO);
         gl.useProgram(obj.ShadowProgram);
         // Usees the same logic to render normal objects
+
+
+        // uniforms
+        gl.uniform1f(obj.ShadowDegrees, theta);
+        gl.uniform1f(obj.ShadowScale, scale);
+        gl.uniform3fv(obj.ShadowTrans, new Float32Array(trans))
+
 
         gl.uniformMatrix4fv(obj.ShadowProjection, false, this.proj);
         gl.uniformMatrix4fv(obj.ShadowView, false, this.view);

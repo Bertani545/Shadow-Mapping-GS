@@ -10,7 +10,7 @@ import {LightSource} from "./light.js"
 
 
 let camera = cameras[0];
-const {getProjectionMatrix, vertexShaderSource} = perspectiveProjection;
+const {getProjectionMatrix, vertexShaderSource} =  perspectiveProjection;
 
 const gl = canvas.getContext("webgl2", {
         antialias: false,
@@ -467,7 +467,7 @@ async function main() {
                 [-0.06298204172269357, 0.987319521752825, 0.14571693239364383],
                 [-0.3847611242348369, -0.1587410451475895, 0.9092635249821667],
             ].flat(),
-            [1.2198221749590001, -0.2196687861401182, -2.3183162007028453]); 
+            [1.2198221749590001, -0.2196687861401182, -2]); 
     
     /*const lightSource1 = new LightSource(1,[
             [0.9982731285632193, -0.011928707708098955, -0.05751927260507243],
@@ -559,6 +559,8 @@ precision highp int;
 uniform mat4 projection, view;
 uniform vec2 focal;
 uniform float deg;
+uniform vec3 trans;
+uniform float scale;
 //uniform vec2 viewport;
 
 layout(location = 0) in vec3 aPosition;
@@ -580,7 +582,7 @@ mat3 rotationZ(float deg)
 
 void main () {
 
-    gl_Position = projection * view * vec4(0.5 * rotationZ(deg) * aPosition + 1.*vec3(2.6849, -0.1703, -1.1099), 1.0);
+    gl_Position = projection * view * vec4(scale * rotationZ(deg) * aPosition + trans, 1.0);
     //gl_Position.w = 1.0;
 
     vColor = aColor;
@@ -678,8 +680,8 @@ if (!gl.getProgramParameter(cube.Program, gl.LINK_STATUS))
 cube.projection = gl.getUniformLocation(cube.Program, "projection");
 cube.view = gl.getUniformLocation(cube.Program, "view");
 cube.degrees = gl.getUniformLocation(cube.Program, "deg");
-
-
+cube.translation = gl.getUniformLocation(cube.Program, "trans");
+cube.scale = gl.getUniformLocation(cube.Program, "scale");
 
 
 // Vertices
@@ -751,6 +753,8 @@ if (!gl.getProgramParameter(cube.ShadowProgram, gl.LINK_STATUS))
 cube.ShadowProjection = gl.getUniformLocation(cube.ShadowProgram, "projection");
 cube.ShadowView = gl.getUniformLocation(cube.ShadowProgram, "view");
 cube.ShadowDegrees = gl.getUniformLocation(cube.ShadowProgram, "deg");
+cube.ShadowTrans = gl.getUniformLocation(cube.ShadowProgram, "trans");
+cube.ShadowScale = gl.getUniformLocation(cube.ShadowProgram, "scale");
 // ------------------------------- Quad --------------------------
 const quadVertexShaderSource = `
 #version 300 es
@@ -779,6 +783,66 @@ void main() {
 }
 `.trim();
 
+const meshesQuadFragmentShaderSource = `
+#version 300 es
+ 
+// fragment shaders don't have a default precision so we need
+// to pick one. highp is a good default. It means "high precision"
+precision highp float;
+
+uniform highp sampler2D u_colorTexture;
+uniform highp sampler2D u_depthTexture;
+uniform mat4 projection, view;
+uniform mat4 lightTransformation; // Only one for now
+
+uniform vec2 viewport;
+
+in vec2 v_texCoord;
+
+
+// we need to declare an output for the fragment shader
+out vec4 outColor;
+ 
+void main() {
+    vec4 pixel_info = texture(u_colorTexture, v_texCoord).rgba;
+
+    vec4 coord = gl_FragCoord;
+    vec4 ndc = vec4(gl_FragCoord.xy / viewport * 2.0 - 1.0,
+                    pixel_info.a * 2.0 -1.,
+                    1.0);
+    vec4 view_space = inverse(projection) * ndc;
+    view_space.xyz /= view_space.w;
+
+
+    vec4 global_space = inverse(view) * vec4(view_space.xyz, 1.0);
+
+
+    // Transform to light space
+    vec4 light_space = lightTransformation * vec4(global_space.xyz, 1.0);
+    light_space /= light_space.w;
+
+    if(abs(light_space.x) > 1.0 || abs(light_space.y) > 1.0)
+    {
+        outColor = vec4(pixel_info.rgb, 1.0);
+        return;
+    }
+
+    light_space.xyz = light_space.xyz * 0.5 + 0.5;
+    
+
+    vec2 depth_info =  texture(u_depthTexture, light_space.xy).rb;
+
+    float bias = max(0.005 * (1.0 - dot(vec3(0, 0, 1), normalize(view_space.xyz))), 0.01);
+    float shadow = light_space.z - bias > depth_info.x  ? 0.5 : 1.0;
+    
+    outColor = vec4(pixel_info.rgb * shadow, 1.0);
+
+    //outColor = vec4(vec3(global_space.z), 1.0);
+    //outColor = vec4(texture(u_depthTexture, v_texCoord).g);
+
+    //outColor = vec4(pixel_info.b);
+}
+`.trim();
 
 const gaussianQuadFragmentShaderSource = `
 #version 300 es
@@ -792,33 +856,7 @@ uniform highp sampler2D u_depthTexture;
 uniform mat4 projection, view;
 uniform mat4 lightTransformation; // Only one for now
 
-in vec2 v_texCoord;
-
-
-// we need to declare an output for the fragment shader
-out vec4 outColor;
- 
-void main() {
-    //float depth = texture(u_colorTexture, v_texCoord).r;
-    //outColor = vec4(vec3(texture(u_colorTexture, v_texCoord).r), 1.0);
-    outColor = texture(u_colorTexture, v_texCoord).rgba;
-
-    //outColor = vec4(vec3(gl_FragDepth), 1.0);
-  
-}
-`.trim();
-
-const meshesQuadFragmentShaderSource = `
-#version 300 es
- 
-// fragment shaders don't have a default precision so we need
-// to pick one. highp is a good default. It means "high precision"
-precision highp float;
-
-uniform highp sampler2D u_colorTexture;
-uniform highp sampler2D u_depthTexture;
-uniform mat4 projection, view;
-uniform mat4 lightTransformation; // Only one for now
+uniform vec2 viewport;
 
 in vec2 v_texCoord;
 
@@ -827,14 +865,56 @@ in vec2 v_texCoord;
 out vec4 outColor;
  
 void main() {
-    //float depth = texture(u_colorTexture, v_texCoord).r;
-    //outColor = vec4(vec3(texture(u_colorTexture, v_texCoord).r), 1.0);
-    outColor = texture(u_colorTexture, v_texCoord).rgba;
+    vec4 pixel_info = texture(u_colorTexture, v_texCoord).rgba;
 
-    //outColor = vec4(vec3(gl_FragDepth), 1.0);
+    vec4 coord = gl_FragCoord;
+    vec4 ndc = vec4(gl_FragCoord.xy / viewport * 2.0 - 1.0,
+                    pixel_info.r * 2.0 -1.,
+                    1.0);
+    vec4 view_space = inverse(projection) * ndc;
+    view_space /= view_space.w;
+
+
+    vec4 global_space = inverse(view) * view_space;
+
+
+    // Transform to light space
+    vec4 light_space = lightTransformation * vec4(global_space.xyz, 1.0);
+    light_space /= light_space.w;
+
+    if(abs(light_space.x) > 1.0 || abs(light_space.y) > 1.0)
+    {
+        outColor = pixel_info.rgba;
+        return;
+    }
+
+    light_space.xyz = light_space.xyz * 0.5 + 0.5;
+    
+
+
+
+    float closest_depth =  texture(u_depthTexture, light_space.xy).g;
+
+    float bias = 0.005;
+    //float bias = max(0.005 * (1.0 - dot(vec3(0, 0, 1), normalize(view_space.xyz))), 0.01);
+
+    float shadow = light_space.z - bias > closest_depth  ? 0.5 : 1.0;
+
+
+
+
+
+    
+    
+    outColor = vec4(pixel_info.rgb * shadow, pixel_info.a);
   
+    //outColor = vec4(vec3(texture(u_depthTexture, light_space.xy).r), pixel_info.a);
+    //outColor = vec4(pixel_info.rgb, pixel_info.a);
+
 }
 `.trim();
+
+
 
 const vaoQuad = gl.createVertexArray();
 gl.bindVertexArray(vaoQuad); // Make it current
@@ -880,6 +960,7 @@ quadGaussian.View =       gl.getUniformLocation(quadGaussian.Program, "view");
 quadGaussian.LightTrans = gl.getUniformLocation(quadGaussian.Program, "lightTransformation");
 quadGaussian.ImageTex =   gl.getUniformLocation(quadGaussian.Program, "u_colorTexture");
 quadGaussian.DepthTex =   gl.getUniformLocation(quadGaussian.Program, "u_depthTexture");
+quadGaussian.Viewport =   gl.getUniformLocation(quadGaussian.Program, "viewport");
 
 
 gl.linkProgram(quadMeshes.Program);
@@ -890,6 +971,7 @@ quadMeshes.View =       gl.getUniformLocation(quadMeshes.Program, "view");
 quadMeshes.LightTrans = gl.getUniformLocation(quadMeshes.Program, "lightTransformation");
 quadMeshes.ImageTex =   gl.getUniformLocation(quadMeshes.Program, "u_colorTexture");
 quadMeshes.DepthTex =   gl.getUniformLocation(quadMeshes.Program, "u_depthTexture");
+quadMeshes.Viewport =   gl.getUniformLocation(quadMeshes.Program, "viewport");
 
 
 
@@ -1014,10 +1096,11 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
         gl.uniformMatrix4fv(cube.projection, false, projectionMatrix);
 
         gl.useProgram(quadGaussian.Program);
-        gl.uniformMatrix4fv(quadGaussian.Projection, true, projectionMatrix);
+        gl.uniformMatrix4fv(quadGaussian.Projection, false, projectionMatrix);
+        gl.uniform2fv(quadGaussian.Viewport, new Float32Array([gl.canvas.width, gl.canvas.height]));
         gl.useProgram(quadMeshes.Program);
-        gl.uniformMatrix4fv(quadMeshes.Projection, true, projectionMatrix);
-
+        gl.uniformMatrix4fv(quadMeshes.Projection, false, projectionMatrix);
+        gl.uniform2fv(quadMeshes.Viewport, new Float32Array([gl.canvas.width, gl.canvas.height]));
 
 
         // -------------------------------- Resize the color buffer
@@ -1554,10 +1637,7 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             document.getElementById("spinner").style.display = "none";
 
             // Render scene in the light sources and create the depth maps
-            gl.useProgram(cube.Program);
-            gl.uniform1f(cube.degrees, theta);
-            gl.useProgram(cube.ShadowProgram);
-            gl.uniform1f(cube.ShadowDegrees, theta);
+            
 
             for(let ls of lightSourcesArray) 
             {   
@@ -1570,7 +1650,9 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
                 {
                     ls.render();
                 }*/
-                ls.render(cube);
+                
+                ls.render(cube, theta, [1.5, -0.1703, -1.5], 0.1);
+                ls.render(cube, theta, [1.5, -0.0, -0.5], 0.5);
 
                 ls.buildShadowsDepthBuffer();
             }
@@ -1595,6 +1677,14 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
             gl.disable(gl.BLEND);
 
             gl.uniformMatrix4fv(cube.view, false, actualViewMatrix);
+
+            gl.uniform1f(cube.degrees, theta);
+            gl.uniform1f(cube.scale, 0.5);
+            gl.uniform3fv(cube.translation, new Float32Array([1.5, -0.0, -0.5]))
+            gl.drawElements(gl.TRIANGLES, cube.Indices.length, gl.UNSIGNED_SHORT, 0);
+
+            gl.uniform1f(cube.scale, 0.1);
+            gl.uniform3fv(cube.translation, new Float32Array([1.5, -0.1703, -1.5]))
             gl.drawElements(gl.TRIANGLES, cube.Indices.length, gl.UNSIGNED_SHORT, 0);
 
 // ---------------  Gaussians
@@ -1647,7 +1737,7 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
             // Render gaussians
             gl.useProgram(quadGaussian.Program);
-            gl.uniformMatrix4fv(quadGaussian.View, true, actualViewMatrix);
+            gl.uniformMatrix4fv(quadGaussian.View, false, actualViewMatrix);
             gl.uniformMatrix4fv(quadGaussian.LightTrans, false, lightSourcesArray[0].worldToScreen);
             gl.uniform1i(quadGaussian.ImageTex, 2);
             gl.uniform1i(quadGaussian.DepthTex, 7);
@@ -1659,7 +1749,7 @@ gl.bindFramebuffer(gl.FRAMEBUFFER, null);
 
             // Render mesh
             gl.useProgram(quadMeshes.Program);
-            gl.uniformMatrix4fv(quadMeshes.View, true, actualViewMatrix);
+            gl.uniformMatrix4fv(quadMeshes.View, false, actualViewMatrix);
             gl.uniformMatrix4fv(quadMeshes.LightTrans, false, lightSourcesArray[0].worldToScreen);
             gl.uniform1i(quadMeshes.ImageTex, 1);
             gl.uniform1i(quadMeshes.DepthTex, 7);
