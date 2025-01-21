@@ -830,10 +830,12 @@ void main() {
     light_space.xyz = light_space.xyz * 0.5 + 0.5;
     
 
-    vec2 depth_info =  texture(u_depthTexture, light_space.xy).rb;
+    float closest_depth =  texture(u_depthTexture, light_space.xy).r;
+    float bias = 0.005;
+    //float bias = max(0.005 * (1.0 - dot(vec3(0, 0, 1), normalize(view_space.xyz))), 0.01);
 
-    float bias = max(0.005 * (1.0 - dot(vec3(0, 0, 1), normalize(view_space.xyz))), 0.01);
-    float shadow = light_space.z - bias > depth_info.x  ? 0.5 : 1.0;
+    float shadow = light_space.z - bias > closest_depth  ? 0.5 : 1.0;
+    
     
     outColor = vec4(pixel_info.rgb * shadow, 1.0);
 
@@ -892,17 +894,18 @@ void main() {
     
 
 
+    vec2 depth_info =  texture(u_depthTexture, light_space.xy).gb;
 
-    float closest_depth =  texture(u_depthTexture, light_space.xy).g;
+    if(depth_info.y < 1.0)
+    {
+        // Its already in shadow
+        outColor = pixel_info.rgba;
+        return;
+    }
 
     float bias = 0.005;
     //float bias = max(0.005 * (1.0 - dot(vec3(0, 0, 1), normalize(view_space.xyz))), 0.01);
-
-    float shadow = light_space.z - bias > closest_depth  ? 0.5 : 1.0;
-
-
-
-
+    float shadow = light_space.z - bias > depth_info.x  ? 0.5 : 1.0;
 
     
     
