@@ -48,12 +48,20 @@ out vec4 vColor;
 out vec2 vPosition;
 out float zPos;
 
+
+// Light
+uniform mat4 lightTransformation; // Only one for now
+out vec4 lightPos;
+
 void main () {
 
 
     uvec4 cen = texelFetch(u_texture, ivec2((uint(index) & 0x3ffu) << 1, uint(index) >> 10), 0);
     vec4 cam = view * vec4(uintBitsToFloat(cen.xyz), 1); 
-    vec4 pos2d = projection * cam; 
+    vec4 pos2d = projection * cam;
+
+    lightPos = lightTransformation * vec4(uintBitsToFloat(cen.xyz), 1); 
+
 
     float clip = 1.2 * pos2d.w;
     if (pos2d.z < -clip || pos2d.x < -clip || pos2d.x > clip || pos2d.y < -clip || pos2d.y > clip) {
@@ -144,10 +152,16 @@ out vec4 vColor;
 out vec2 vPosition;
 out float zPos;
 
+// Light
+uniform mat4 lightTransformation; // Only one for now
+out vec4 lightPos;
+
 void main () {
     uvec4 cen = texelFetch(u_texture, ivec2((uint(index) & 0x3ffu) << 1, uint(index) >> 10), 0);
     vec4 cam = view * vec4(uintBitsToFloat(cen.xyz), 1); 
     vec4 pos2d = projection * cam; // ortographic
+
+    lightPos = lightTransformation * vec4(uintBitsToFloat(cen.xyz), 1); 
 
     float clip = 1.2 * pos2d.w;
     if (pos2d.z < -clip || pos2d.z > clip || pos2d.x < -clip || pos2d.x > clip || pos2d.y < -clip || pos2d.y > clip) {
@@ -256,11 +270,17 @@ out vec4 vColor;
 out vec2 vPosition;
 out float zPos;
 
+// Light
+uniform mat4 lightTransformation; // Only one for now
+out vec4 lightPos;
+
 void main () {
     uvec4 cen = texelFetch(u_texture, ivec2((uint(index) & 0x3ffu) << 1, uint(index) >> 10), 0);
     vec4 cam = view * vec4(uintBitsToFloat(cen.xyz), 1); 
     vec4 pos2d = projection * cam; 
 
+    lightPos = lightTransformation * vec4(uintBitsToFloat(cen.xyz), 1); 
+        
     float clip = 1.2 * pos2d.w;
     if (pos2d.z < -clip || pos2d.x < -clip || pos2d.x > clip || pos2d.y < -clip || pos2d.y > clip) {
         gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
