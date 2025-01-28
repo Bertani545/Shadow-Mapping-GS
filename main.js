@@ -638,11 +638,15 @@ void main () {
 
     vec4 fragPosLightSpace = lightPos;
     vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
-    projCoords = projCoords * 0.5 + 0.5;
-    float closestDepth = texture(u_depthTexture, projCoords.xy).r; 
-    float currentDepth = projCoords.z;
-    float bias = 0.005;
-    float shadow = currentDepth - bias > closestDepth  ? 0.2 : 1.0;
+    float shadow = 1.0;
+    if(abs(projCoords.x) <= 1.0 && abs(projCoords.y) <= 1.0)
+    {
+        projCoords = projCoords * 0.5 + 0.5;
+        float closestDepth = texture(u_depthTexture, projCoords.xy).r; 
+        float currentDepth = projCoords.z;
+        float bias = 0.005;
+        shadow = currentDepth - bias > closestDepth  ? 0.2 : 1.0;
+    }
 
     fragColor = vec4(vColor.rgb * shadow, 1.0);
 }
